@@ -45,7 +45,11 @@ h1 span{display:block;font-weight:500;font-size:.5em;letter-spacing:.14em;margin
 .sc{font:500 calc(var(--u)*13) var(--f-mono);letter-spacing:.2em;color:var(--muted)}
 .sc b{display:block;margin-top:calc(var(--u)*4);font:700 calc(var(--u)*34) var(--f-display);color:#fff;letter-spacing:.02em;text-shadow:0 0 calc(var(--u)*14) rgba(95,243,230,.5)}
 .rec{font:700 calc(var(--u)*14) var(--f-display);color:var(--amarillo);letter-spacing:.1em;text-shadow:0 0 calc(var(--u)*12) rgba(255,210,31,.6)}
-#nameForm{display:flex;gap:calc(var(--u)*8);margin:calc(var(--u)*4) 0}
+#nameForm{display:flex;flex-wrap:wrap;justify-content:center;gap:calc(var(--u)*8);margin:calc(var(--u)*4) 0}
+#pin{order:3;flex:0 0 100%;max-width:calc(var(--u)*190 + 110px);min-height:44px;padding:0 calc(var(--u)*14);border-radius:999px;border:1px solid rgba(255,210,31,.7);background:rgba(40,30,10,.6);color:#fff;text-align:center;letter-spacing:.3em;font:500 max(16px,calc(var(--u)*16)) var(--f-mono)}
+#pin:focus{outline:2px solid var(--amarillo);outline-offset:2px}
+.msg{margin:0;max-width:calc(var(--u)*320);font:500 max(13px,calc(var(--u)*13))/1.4 var(--f-mono);color:var(--amarillo)}
+.msg.err{color:#ff8f94}
 #nm{width:calc(var(--u)*190);min-height:44px;padding:0 calc(var(--u)*14);border-radius:999px;border:1px solid rgba(95,243,230,.6);background:rgba(10,20,50,.7);color:#fff;text-align:center;text-transform:uppercase;letter-spacing:.14em;font:500 max(16px,calc(var(--u)*16)) var(--f-mono)}
 #nm:focus{outline:2px solid var(--cian);outline-offset:2px}
 #boardL{list-style:none;margin:calc(var(--u)*6) 0 0;padding:0;width:calc(var(--u)*300);font:500 calc(var(--u)*13) var(--f-mono)}
@@ -82,7 +86,8 @@ h1 span{display:block;font-weight:500;font-size:.5em;letter-spacing:.14em;margin
    <h2>GAME OVER</h2>
    <div class="sc">PUNTAJE<b id="finalS">0</b></div>
    <div id="rec" class="rec hidden">¡NUEVO RÉCORD!</div>
-   <form id="nameForm" autocomplete="off"><input id="nm" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="TU NOMBRE" aria-label="Tu nombre"><button class="btn sm" type="submit">GUARDAR</button></form>
+   <form id="nameForm" autocomplete="off"><input id="nm" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="TU NOMBRE" aria-label="Tu nombre"><button id="save" class="btn sm" type="submit">GUARDAR</button><input id="pin" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off" placeholder="PIN" aria-label="PIN del nombre reservado"></form>
+   <p id="msg" class="msg hidden" role="alert"></p>
    <ol id="boardL"></ol>
    <p id="note" class="note">Ranking de prueba: se guarda solo en este dispositivo. El público, para que todos lo vean, se conecta después al servidor.</p>
    <button id="again" class="btn sm">JUGAR OTRA VEZ</button>
@@ -504,12 +509,13 @@ function gameOver(){
  mode='over';$('pz').classList.add('hidden');musStop();newRec=score>hi&&score>0;if(newRec){hi=score;sset('dsr_hi',hi)}
  $('finalS').textContent=pad(score,6);$('rec').classList.toggle('hidden',!newRec);
  var form=$('nameForm');form.classList.toggle('hidden',score<=0);$('nm').value=sget('dsr_name','')||'';
- submitted=false;renderBoard(-1);$('over').classList.remove('hidden');apiTop(function(){if(!submitted)renderBoard(-1)});
+ submitted=false;busy=false;$('save').disabled=false;$('pin').value='';$('pin').classList.add('hidden');say('');renderBoard(-1);$('over').classList.remove('hidden');apiTop(function(){if(!submitted)renderBoard(-1)});
  if(score>0)setTimeout(function(){try{$('nm').focus({preventScroll:true})}catch(e){}},250);
 }
 /* ---------- ranking: público (API) con respaldo local ---------- */
 var API=(function(){if(typeof window.DSR_API==='string')return window.DSR_API;var m=document.querySelector('meta[name="dsr-api"]');return m?(m.getAttribute('content')||''):''})();
-var pub=null,apiOK=false,submitted=false;
+var pub=null,apiOK=false,submitted=false,busy=false;
+function say(t,err){var m=$('msg');m.textContent=t||'';m.classList.toggle('err',!!err);m.classList.toggle('hidden',!t)}
 function apiReq(method,body,cb){
  if(!API||typeof fetch!=='function'){cb(null);return}
  var ctl=typeof AbortController==='function'?new AbortController():null,done=false,
@@ -541,20 +547,37 @@ function saveLocal(n){
  board.push({n:n,s:score,t:Date.now()});board.sort(function(a,b){return b.s-a.s});board=board.slice(0,10);sset('dsr_board',board);
  return board.findIndex(function(b){return b.s===score&&b.n===n});
 }
-$('nm').addEventListener('input',function(){var c=cleanName(this.value);if(c!==this.value)this.value=c});
+$('nm').addEventListener('input',function(){var c=cleanName(this.value);if(c!==this.value)this.value=c;
+ if(!$('pin').classList.contains('hidden')){$('pin').classList.add('hidden');$('pin').value=''}say('')});
+$('pin').addEventListener('input',function(){var c=this.value.replace(/[^0-9]/g,'');if(c!==this.value)this.value=c});
 $('nameForm').addEventListener('submit',function(ev){
- ev.preventDefault();if(submitted)return;submitted=true;
- var n=cleanName($('nm').value)||'ANON',s=score,ms=Math.round(playT*1000);
- sset('dsr_name',n);var li=saveLocal(n);$('nameForm').classList.add('hidden');
- renderBoard(apiOK?-1:li);
- apiReq('POST',{name:n,score:s,duration:ms},function(x){
-  if(x&&x.status===200&&x.j&&Array.isArray(x.j.top)){
-   pub=x.j.top;setApi(true);var r=x.j.rank|0;
-   renderBoard(r>=1&&r<=5?r-1:-1,r>5?{n:n,s:x.j.best,r:r}:null);
-  }else if(x&&x.status>=400&&x.status<500&&x.status!==429){
-   // el servidor respondió pero rechazó el puntaje: se queda solo en local
-   apiTop(function(){renderBoard(apiOK?-1:li)});
-  }else{setApi(false);renderBoard(li)}
+ ev.preventDefault();if(submitted||busy)return;
+ var n=cleanName($('nm').value)||'ANON',s=score,ms=Math.round(playT*1000),pinEl=$('pin'),pin=pinEl.classList.contains('hidden')?'':pinEl.value;
+ if(!pinEl.classList.contains('hidden')&&!pin){say('Escribe tu PIN.',true);try{pinEl.focus()}catch(e){}return}
+ var body={name:n,score:s,duration:ms};if(pin)body.pin=pin;
+ sset('dsr_name',n);busy=true;$('save').disabled=true;say('');
+ function finishLocal(msg){submitted=true;busy=false;var li=saveLocal(n);$('nameForm').classList.add('hidden');say(msg||'');renderBoard(apiOK?-1:li);return li}
+ function retry(msg,focusPin){busy=false;$('save').disabled=false;say(msg,true);try{(focusPin?pinEl:$('nm')).focus({preventScroll:true})}catch(e){}}
+ apiReq('POST',body,function(x){
+  var j=x&&x.j||{};
+  if(x&&x.status===200&&Array.isArray(j.top)){
+   submitted=true;busy=false;saveLocal(n);$('nameForm').classList.add('hidden');say('');
+   pub=j.top;setApi(true);var r=j.rank|0;
+   renderBoard(r>=1&&r<=5?r-1:-1,r>5?{n:n,s:j.best,r:r}:null);
+  }else if(x&&x.status===403&&j.reserved){
+   // nombre reservado: pedir PIN y reintentar
+   pinEl.classList.remove('hidden');
+   if(j.badPin){pinEl.value='';retry('PIN incorrecto. Intenta otra vez o usa otro nombre.',true)}
+   else retry('Ese nombre está reservado. Escribe tu PIN o usa otro nombre.',true);
+  }else if(x&&x.status===400&&j.notAllowed){
+   retry('Ese nombre no está permitido. Usa otro.',false);
+  }else if(x&&x.status===429&&j.reserved){
+   retry('Demasiados intentos. Espera unos minutos o usa otro nombre.',true);
+  }else if(x&&x.status>=400&&x.status<500){
+   // el servidor respondió pero no aceptó el puntaje: se queda solo en este dispositivo
+   finishLocal(x.status===429?'Demasiados envíos seguidos: guardado solo en este dispositivo.':'');
+   apiTop(function(){if(apiOK)renderBoard(-1)});
+  }else{setApi(false);finishLocal('')}
  });
 });
 $('play').addEventListener('click',startGame);

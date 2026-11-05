@@ -1,0 +1,19 @@
+{
+  "_help": "Offensive words for player names. Edit freely, then restart the app. 'contains' = blocked anywhere inside a name (use only for words that are not part of normal words). 'exact' = blocked only when the whole name is that word, optionally plus digits (use for short words, e.g. 'culo' would otherwise block CALCULO). Lowercase, no accents. Case, accents, repeated letters and leetspeak (0=o 1=i/l 3=e 4=a 5=s 7=t @=a $=s) are normalized automatically.",
+  "contains": [
+    "pendejo", "pendeja", "verga", "vergon", "chingad", "chingar", "chingon", "chingue", "cabron", "cabrona",
+    "mierda", "maricon", "marica", "mariposon", "culero", "culera", "culiao", "mamaguevo", "mamahuevo", "mamavergas",
+    "hijueputa", "hijoputa", "hijodeputa", "putamadre", "putita", "putona", "malparido", "malparida", "malcogida",
+    "chucha", "panocha", "huevon", "guevon", "webon", "pinche", "zorra", "perra", "puton",
+    "violador", "violacion", "violar", "sudaca", "negrata", "mongolico", "retrasado", "travelo", "joton", "tortillera",
+    "sexo", "porno", "pajero", "pajera", "chupamela", "mamada", "cagada", "cagon",
+    "fuck", "fuk", "shit", "bitch", "cunt", "pussy", "whore", "slut", "bastard", "asshole", "dumbass",
+    "nigger", "nigga", "faggot", "retard", "rapist", "porn", "penis", "vagina", "dildo", "jizz", "tits",
+    "kike", "chink", "tranny", "wank", "twat", "blowjob", "handjob", "motherf", "cocksuck",
+    "nazi", "hitler", "heilh", "kkk"
+  ],
+  "exact": [
+    "puto", "puta", "culo", "ano", "pene", "teta", "pija", "joto", "cono", "coger", "cogida", "mamon", "pedo", "naco",
+    "dick", "cock", "ass", "fag", "rape", "cum", "tit", "spic", "sex", "anal", "hoe", "piss"
+  ]
+}
