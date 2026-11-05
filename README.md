@@ -36,12 +36,13 @@ Rules enforced by the server:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `PORT` | `8787` | Most hosts set this for you. |
+| `PORT` | `8787` | Most hosts set this for you. A non-numeric value is used as a socket path. If the port is taken, the app stops with a clear message. |
 | `ADMIN_KEY` | (empty: admin off) | Admin password, **at least 16 characters**. If it is unset or shorter, `/api/admin/*` returns 503. See "Moderation" below. |
 | `ALLOWED_ORIGIN` | (empty: POST disabled) | Comma-separated, e.g. `https://[game domain]`. Must match exactly, including `https://` and with no trailing slash. |
 | `BLOCKLIST_FILE` | `server/blocklist.json` | Word list for the name filter. |
-| `DATA_FILE` | `server/data/scores.json` | Put it outside the public web folder. Back it up if you care about the ranking. |
-| `TRUST_PROXY` | off | Set to `1` only if the app runs behind a proxy that sets `X-Forwarded-For`. Otherwise all players may share one IP for rate limiting, or anyone can fake their IP. [Not verified for SiteGround.] |
+| `DATA_DIR` | `server/data` | Folder for `scores.json` (scores, blocks, PIN hashes). Created if missing. Put it outside the public web folder and back it up. If it cannot be written, the app stops at startup with a clear message. |
+| `DATA_FILE` | (unset) | Older option: full path to the data file. If set, it wins over `DATA_DIR`. |
+| `TRUST_PROXY` | off | `1`/`true`/`yes`/`on` = take the player IP from `X-Forwarded-For` (the first valid address; IPv4 or IPv6, with or without port). If the header is missing or malformed, the connection IP is used. Off = exactly the old behavior. Turn it on only behind a proxy that sets this header. If the proxy appends to a header the player sent, the first address can be faked. [Not verified for SiteGround.] |
 | `MAX_PPS`, `SCORE_GRACE` | `1500`, `5000` | Anti-cheat cap. Raise them if the game's scoring changes. |
 | `POST_LIMIT`, `GET_LIMIT`, `RATE_WINDOW_MS` | `6`, `60`, `60000` | Rate limit. |
 
@@ -54,11 +55,15 @@ Rules enforced by the server:
 
 ### Deploying on SiteGround "Node.js Projects" (nothing has been deployed)
 
+**Step-by-step guide in Spanish: [`DESPLIEGUE-SITEGROUND.md`](DESPLIEGUE-SITEGROUND.md).**
+
+On startup the app prints one line: `[dsr] started: PORT=… DATA_DIR=… TRUST_PROXY=on|off ALLOWED_ORIGIN=… ADMIN=enabled|disabled`. It never prints the key.
+
 Entry file: `server/server.js` (or use `npm start`). The port comes from `PORT`. Steps as far as they are known; everything in [brackets] is unverified and must be checked in Site Tools:
 1. Upload the `server/` folder [to which path SiteGround expects].
 2. Create the Node.js project, with Node version [>= 18 available?], startup file `server.js`.
-3. Set the environment variables `ALLOWED_ORIGIN` and `DATA_FILE` [where SiteGround lets you set them].
-4. Check that the app can write to the `DATA_FILE` folder and that the file survives restarts and redeploys [unverified].
+3. Set the environment variables `ADMIN_KEY`, `ALLOWED_ORIGIN`, `DATA_DIR` and `TRUST_PROXY` [where SiteGround lets you set them].
+4. Check that the file in `DATA_DIR` survives restarts and redeploys [unverified]. The app itself refuses to start if it cannot write there.
 5. Check whether SiteGround sits behind a proxy and sets `X-Forwarded-For`, then decide on `TRUST_PROXY` [unverified].
 6. [Limits on RAM, CPU, uptime and whether the app sleeps when idle: unverified.]
 
@@ -123,6 +128,7 @@ Possible next steps, if needed: a server-issued run token at game start (the ser
 ### Tests
 
     node server/test/api.test.js          # API: validation, CORS, rate limit, atomic file, persistence, admin auth, delete/block/reserve, filter
+    node server/test/deploy.test.js       # Deployment config: PORT, DATA_DIR (incl. unwritable), TRUST_PROXY / X-Forwarded-For, startup line
     node tests/leaderboard.e2e.js         # Playwright (Chromium): phone 390x844 + desktop. Submit, list, offline fallback, bad input, admin page, PIN flow, filter message
 
 ## Credits

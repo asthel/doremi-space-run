@@ -18,12 +18,16 @@
  *   DELETE /api/admin/reserve/:name
  *
  * Config (environment variables):
- *   PORT              port to listen on (default 8787)
+ *   PORT              port to listen on (default 8787). A non-numeric value is used as a socket/pipe path.
  *   ALLOWED_ORIGIN    comma-separated origins allowed by CORS, e.g. https://bakkufest.com
  *   ADMIN_KEY         admin password, at least 16 characters. Never put it in code or in git.
- *   DATA_FILE         path to the JSON store (default ./data/scores.json next to this file)
+ *   DATA_DIR          folder for the data file scores.json (scores, blocks, PIN hashes).
+ *                     Default: ./data next to this file. Must be writable, or the app stops at startup.
+ *   DATA_FILE         (older option) full path to the JSON store; if set, it wins over DATA_DIR
  *   BLOCKLIST_FILE    path to the word list (default ./blocklist.json next to this file)
- *   TRUST_PROXY       "1" to read the client IP from X-Forwarded-For (only behind a proxy you trust)
+ *   TRUST_PROXY       off by default. "1", "true", "yes" or "on" = read the player IP from X-Forwarded-For
+ *                     (first valid IP address in it); if the header is missing or has no valid IP,
+ *                     the connection's own IP is used. Turn on only behind a proxy you trust.
  *   MAX_PPS           max points per second of play time (default 1500)
  *   SCORE_GRACE       points allowed on top of MAX_PPS * seconds (default 5000)
  *   POST_LIMIT        max POSTs per IP per window (default 6)
@@ -34,16 +38,26 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const net = require('net');
 
 const env = process.env;
 const num = (v, d) => (v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 
+function portFrom(v) {
+  if (v === undefined || String(v).trim() === '') return 8787;
+  const t = String(v).trim();
+  if (/^\d+$/.test(t)) return Number(t);
+  return t; // some hosts hand the app a socket/pipe path instead of a number
+}
+const truthy = (v) => /^(1|true|yes|on)$/i.test(String(v || '').trim());
+const DATA_DIR = path.resolve(env.DATA_FILE ? path.dirname(env.DATA_FILE) : (env.DATA_DIR && env.DATA_DIR.trim()) || path.join(__dirname, 'data'));
+
 const CFG = {
-  port: num(env.PORT, 8787),
+  port: portFrom(env.PORT),
   origins: (env.ALLOWED_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean),
-  dataFile: env.DATA_FILE || path.join(__dirname, 'data', 'scores.json'),
+  dataFile: env.DATA_FILE ? path.resolve(env.DATA_FILE) : path.join(DATA_DIR, 'scores.json'),
   blocklistFile: env.BLOCKLIST_FILE || path.join(__dirname, 'blocklist.json'),
-  trustProxy: env.TRUST_PROXY === '1',
+  trustProxy: truthy(env.TRUST_PROXY),
   maxPps: num(env.MAX_PPS, 1500),
   grace: num(env.SCORE_GRACE, 5000),
   postLimit: num(env.POST_LIMIT, 6),
@@ -240,12 +254,26 @@ setInterval(() => {
   for (const [k, arr] of hits) if (!arr.length || now - arr[arr.length - 1] >= LONGEST) hits.delete(k);
 }, 60000).unref();
 
+// One entry of X-Forwarded-For -> plain IP, or null. Accepts "1.2.3.4", "1.2.3.4:5678", "2001:db8::1", "[2001:db8::1]:443".
+function ipFromEntry(raw) {
+  let s = String(raw || '').trim().replace(/^"|"$/g, '');
+  if (!s) return null;
+  let m = /^\[([^\]]+)\](?::\d+)?$/.exec(s);
+  if (m) s = m[1];
+  else if ((m = /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/.exec(s))) s = m[1];
+  return net.isIP(s) ? s.toLowerCase() : null;
+}
+function ipFromForwarded(header) {
+  if (header === undefined || header === null) return null;
+  const list = Array.isArray(header) ? header.join(',') : String(header);
+  if (list.length > 2048) return null;
+  for (const part of list.split(',')) { const ip = ipFromEntry(part); if (ip) return ip; }
+  return null;
+}
 function clientIp(req) {
-  if (CFG.trustProxy) {
-    const xff = req.headers['x-forwarded-for'];
-    if (xff) return String(xff).split(',')[0].trim();
-  }
-  return req.socket.remoteAddress || 'unknown';
+  const own = req.socket.remoteAddress || 'unknown';
+  if (!CFG.trustProxy) return own; // same as before: the connection's IP
+  return ipFromForwarded(req.headers['x-forwarded-for']) || own;
 }
 
 /* ---------- validation ---------- */
@@ -477,9 +505,32 @@ const server = http.createServer((req, res) => {
   return send(res, 405, { error: 'method not allowed' });
 });
 
+// Stop right away, with a clear message, if the data folder cannot be written.
+function checkDataDir() {
+  const dir = path.dirname(CFG.dataFile);
+  const probe = path.join(dir, '.write-test-' + process.pid);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(probe, 'ok');
+    fs.unlinkSync(probe);
+  } catch (e) {
+    console.error('[dsr] ERROR: cannot write to DATA_DIR "' + dir + '" (' + (e.code || e.message) + '). ' +
+      'Create that folder, give the app permission to write there, or set DATA_DIR to a writable folder. Not starting.');
+    process.exit(1);
+  }
+}
+
+checkDataDir();
 loadBlocklist();
 load();
+server.on('error', (e) => {
+  console.error('[dsr] ERROR: cannot listen on PORT ' + CFG.port + ' (' + (e.code || e.message) + '). Not starting.');
+  process.exit(1);
+});
 server.listen(CFG.port, () => {
-  console.log('[dsr] leaderboard listening on port ' + CFG.port + '; allowed origins: ' + (CFG.origins.join(', ') || '(none: POST disabled)') +
-    '; admin: ' + (adminDigest ? 'enabled' : adminKeyTooShort ? 'DISABLED (ADMIN_KEY shorter than ' + ADMIN_KEY_MIN + ' characters)' : 'disabled (ADMIN_KEY not set)'));
+  const a = server.address();
+  const port = a && typeof a === 'object' ? a.port : a;
+  console.log('[dsr] started: PORT=' + port + ' DATA_DIR=' + path.dirname(CFG.dataFile) + ' TRUST_PROXY=' + (CFG.trustProxy ? 'on' : 'off') +
+    ' ALLOWED_ORIGIN=' + (CFG.origins.join(',') || '(none: POST disabled)') +
+    ' ADMIN=' + (adminDigest ? 'enabled' : adminKeyTooShort ? 'DISABLED (ADMIN_KEY shorter than ' + ADMIN_KEY_MIN + ' characters)' : 'disabled (ADMIN_KEY not set)'));
 });
