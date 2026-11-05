@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- URL del ranking público (server/). Vacío = solo ranking local. -->
+<meta name="dsr-api" content="/api/scores">
 <title>Doremi Space Run</title>
 <style>
 @font-face{font-family:"Unbounded";src:url(fonts/unbounded-500.woff2) format("woff2");font-weight:500;font-display:swap}
@@ -43,7 +45,11 @@ h1 span{display:block;font-weight:500;font-size:.5em;letter-spacing:.14em;margin
 .sc{font:500 calc(var(--u)*13) var(--f-mono);letter-spacing:.2em;color:var(--muted)}
 .sc b{display:block;margin-top:calc(var(--u)*4);font:700 calc(var(--u)*34) var(--f-display);color:#fff;letter-spacing:.02em;text-shadow:0 0 calc(var(--u)*14) rgba(95,243,230,.5)}
 .rec{font:700 calc(var(--u)*14) var(--f-display);color:var(--amarillo);letter-spacing:.1em;text-shadow:0 0 calc(var(--u)*12) rgba(255,210,31,.6)}
-#nameForm{display:flex;gap:calc(var(--u)*8);margin:calc(var(--u)*4) 0}
+#nameForm{display:flex;flex-wrap:wrap;justify-content:center;gap:calc(var(--u)*8);margin:calc(var(--u)*4) 0}
+#pin{order:3;flex:0 0 100%;max-width:calc(var(--u)*190 + 110px);min-height:44px;padding:0 calc(var(--u)*14);border-radius:999px;border:1px solid rgba(255,210,31,.7);background:rgba(40,30,10,.6);color:#fff;text-align:center;letter-spacing:.3em;font:500 max(16px,calc(var(--u)*16)) var(--f-mono)}
+#pin:focus{outline:2px solid var(--amarillo);outline-offset:2px}
+.msg{margin:0;max-width:calc(var(--u)*320);font:500 max(13px,calc(var(--u)*13))/1.4 var(--f-mono);color:var(--amarillo)}
+.msg.err{color:#ff8f94}
 #nm{width:calc(var(--u)*190);min-height:44px;padding:0 calc(var(--u)*14);border-radius:999px;border:1px solid rgba(95,243,230,.6);background:rgba(10,20,50,.7);color:#fff;text-align:center;text-transform:uppercase;letter-spacing:.14em;font:500 max(16px,calc(var(--u)*16)) var(--f-mono)}
 #nm:focus{outline:2px solid var(--cian);outline-offset:2px}
 #boardL{list-style:none;margin:calc(var(--u)*6) 0 0;padding:0;width:calc(var(--u)*300);font:500 calc(var(--u)*13) var(--f-mono)}
@@ -80,9 +86,10 @@ h1 span{display:block;font-weight:500;font-size:.5em;letter-spacing:.14em;margin
    <h2>GAME OVER</h2>
    <div class="sc">PUNTAJE<b id="finalS">0</b></div>
    <div id="rec" class="rec hidden">¡NUEVO RÉCORD!</div>
-   <form id="nameForm" autocomplete="off"><input id="nm" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="TU NOMBRE" aria-label="Tu nombre"><button class="btn sm" type="submit">GUARDAR</button></form>
+   <form id="nameForm" autocomplete="off"><input id="nm" maxlength="10" autocapitalize="characters" spellcheck="false" placeholder="TU NOMBRE" aria-label="Tu nombre"><button id="save" class="btn sm" type="submit">GUARDAR</button><input id="pin" class="hidden" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off" placeholder="PIN" aria-label="PIN del nombre reservado"></form>
+   <p id="msg" class="msg hidden" role="alert"></p>
    <ol id="boardL"></ol>
-   <p class="note">Ranking de prueba: se guarda solo en este dispositivo. El público, para que todos lo vean, se conecta después al servidor.</p>
+   <p id="note" class="note">Ranking de prueba: se guarda solo en este dispositivo. El público, para que todos lo vean, se conecta después al servidor.</p>
    <button id="again" class="btn sm">JUGAR OTRA VEZ</button>
   </div>
   <div id="pause" class="ov hidden"><h2>PAUSA</h2><button id="resume" class="btn">SEGUIR</button><button id="quit" class="btn sm">SALIR</button></div>
@@ -257,7 +264,7 @@ var mode='boot'; // boot, title, play, dying, over
 var attract=true,autoplay=false;
 var ship=null,score=0,lives=3,wave=0,theme=THEMES[0],tNow=0;
 var enemies=[],pShots=[],eShots=[],parts=[],rings=[],pops=[],ups=[];
-var fireT=0,diveT=2,eFireT=1.5,waveT=0,bannerT=0,bannerTxt='',clearT=-1,shake=0,flashRed=0,deadT=0,newRec=false,paused=false,sfxT=0;
+var fireT=0,diveT=2,eFireT=1.5,waveT=0,bannerT=0,bannerTxt='',clearT=-1,shake=0,flashRed=0,deadT=0,playT=0,newRec=false,paused=false,sfxT=0;
 function newShip(){return {x:W/2,y:H-120,tilt:0,inv:0,shield:false,dbl:0,flame:0,alive:true}}
 ship=newShip();
 var input={l:0,r:0,u:0,d:0,dragging:false,pid:null,offX:0,offY:0,tx:null,ty:null,mouse:false};
@@ -376,7 +383,7 @@ function collect(u){
 
 /* ---------- ciclo ---------- */
 function update(dt){
- tNow+=dt;
+ tNow+=dt;if(mode==='play'&&!attract)playT+=dt;
  if(warp>1)warp=Math.max(1,warp-dt*3.2);
  if(bannerT>0)bannerT-=dt;
  if(shake>0)shake=Math.max(0,shake-dt*34);
@@ -494,7 +501,7 @@ function resetWorld(){pShots=[];eShots=[];parts=[];rings=[];pops=[];ups=[];enemi
 function startAttract(){attract=true;mode='title';resetWorld();score=0;lives=3;startWave(1);bannerT=0;warp=1;
  $('title').classList.remove('hidden');$('over').classList.add('hidden');$('hsT').textContent=pad(hi,6)}
 function startGame(){
- initAudio();attract=false;mode='play';resetWorld();score=0;lives=3;newRec=false;startWave(1);
+ initAudio();attract=false;mode='play';resetWorld();score=0;lives=3;newRec=false;playT=0;startWave(1);
  MUS.drums=true;musStart();
  $('title').classList.add('hidden');$('over').classList.add('hidden');$('pz').classList.remove('hidden');
 }
@@ -502,20 +509,76 @@ function gameOver(){
  mode='over';$('pz').classList.add('hidden');musStop();newRec=score>hi&&score>0;if(newRec){hi=score;sset('dsr_hi',hi)}
  $('finalS').textContent=pad(score,6);$('rec').classList.toggle('hidden',!newRec);
  var form=$('nameForm');form.classList.toggle('hidden',score<=0);$('nm').value=sget('dsr_name','')||'';
- renderBoard(-1);$('over').classList.remove('hidden');
+ submitted=false;busy=false;$('save').disabled=false;$('pin').value='';$('pin').classList.add('hidden');say('');renderBoard(-1);$('over').classList.remove('hidden');apiTop(function(){if(!submitted)renderBoard(-1)});
  if(score>0)setTimeout(function(){try{$('nm').focus({preventScroll:true})}catch(e){}},250);
 }
-function renderBoard(me){
- var ol=$('boardL');ol.innerHTML='';
- for(var i=0;i<5;i++){var li=document.createElement('li');var b=board[i];
-  if(b){if(i===me)li.className='me';li.innerHTML='<i>'+(i+1)+'</i><span></span><b>'+pad(b.s,6)+'</b>';li.children[1].textContent=b.n}
+/* ---------- ranking: público (API) con respaldo local ---------- */
+var API=(function(){if(typeof window.DSR_API==='string')return window.DSR_API;var m=document.querySelector('meta[name="dsr-api"]');return m?(m.getAttribute('content')||''):''})();
+var pub=null,apiOK=false,submitted=false,busy=false;
+function say(t,err){var m=$('msg');m.textContent=t||'';m.classList.toggle('err',!!err);m.classList.toggle('hidden',!t)}
+function apiReq(method,body,cb){
+ if(!API||typeof fetch!=='function'){cb(null);return}
+ var ctl=typeof AbortController==='function'?new AbortController():null,done=false,
+  to=setTimeout(function(){if(ctl)ctl.abort();fin(null)},5000);
+ function fin(d){if(done)return;done=true;clearTimeout(to);cb(d)}
+ var o={method:method,headers:{'Accept':'application/json'},cache:'no-store'};if(ctl)o.signal=ctl.signal;
+ if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body)}
+ fetch(API,o).then(function(r){return r.json().then(function(j){return {status:r.status,j:j}},function(){return {status:r.status,j:null}})})
+  .then(function(x){fin(x)},function(){fin(null)});
+}
+function setApi(ok){apiOK=ok;$('note').classList.toggle('hidden',ok)}
+function apiTop(cb){apiReq('GET',null,function(x){
+ if(x&&x.status===200&&x.j&&Array.isArray(x.j.top)){pub=x.j.top;setApi(true)}else{pub=null;setApi(false)}if(cb)cb()})}
+function rows(){return apiOK&&pub?pub.map(function(e){return {n:e.name,s:e.score,r:e.rank}}):board.map(function(b,i){return {n:b.n,s:b.s,r:i+1}})}
+function renderBoard(me,extra){
+ var ol=$('boardL'),list=rows();ol.innerHTML='';
+ function row(i,b,mine){var li=document.createElement('li');
+  if(b){if(mine)li.className='me';li.innerHTML='<i></i><span></span><b>'+pad(b.s,6)+'</b>';li.children[0].textContent=b.r;li.children[1].textContent=b.n}
   else{li.className='empty';li.innerHTML='<i>'+(i+1)+'</i><span>- - -</span><b>------</b>'}
   ol.appendChild(li)}
+ for(var i=0;i<5;i++)row(i,list[i],i===me);
+ if(extra)row(5,extra,true);
 }
+function cleanName(v){
+ v=String(v||'');try{v=v.normalize('NFD')}catch(e){}
+ return v.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,10);
+}
+function saveLocal(n){
+ board.push({n:n,s:score,t:Date.now()});board.sort(function(a,b){return b.s-a.s});board=board.slice(0,10);sset('dsr_board',board);
+ return board.findIndex(function(b){return b.s===score&&b.n===n});
+}
+$('nm').addEventListener('input',function(){var c=cleanName(this.value);if(c!==this.value)this.value=c;
+ if(!$('pin').classList.contains('hidden')){$('pin').classList.add('hidden');$('pin').value=''}say('')});
+$('pin').addEventListener('input',function(){var c=this.value.replace(/[^0-9]/g,'');if(c!==this.value)this.value=c});
 $('nameForm').addEventListener('submit',function(ev){
- ev.preventDefault();var n=($('nm').value||'').replace(/[^\p{L}\p{N} _.-]/gu,'').trim().toUpperCase().slice(0,10);if(!n)n='ANON';
- sset('dsr_name',n);board.push({n:n,s:score,t:Date.now()});board.sort(function(a,b){return b.s-a.s});board=board.slice(0,10);sset('dsr_board',board);
- var idx=board.findIndex(function(b){return b.s===score&&b.n===n});renderBoard(idx);$('nameForm').classList.add('hidden');
+ ev.preventDefault();if(submitted||busy)return;
+ var n=cleanName($('nm').value)||'ANON',s=score,ms=Math.round(playT*1000),pinEl=$('pin'),pin=pinEl.classList.contains('hidden')?'':pinEl.value;
+ if(!pinEl.classList.contains('hidden')&&!pin){say('Escribe tu PIN.',true);try{pinEl.focus()}catch(e){}return}
+ var body={name:n,score:s,duration:ms};if(pin)body.pin=pin;
+ sset('dsr_name',n);busy=true;$('save').disabled=true;say('');
+ function finishLocal(msg){submitted=true;busy=false;var li=saveLocal(n);$('nameForm').classList.add('hidden');say(msg||'');renderBoard(apiOK?-1:li);return li}
+ function retry(msg,focusPin){busy=false;$('save').disabled=false;say(msg,true);try{(focusPin?pinEl:$('nm')).focus({preventScroll:true})}catch(e){}}
+ apiReq('POST',body,function(x){
+  var j=x&&x.j||{};
+  if(x&&x.status===200&&Array.isArray(j.top)){
+   submitted=true;busy=false;saveLocal(n);$('nameForm').classList.add('hidden');say('');
+   pub=j.top;setApi(true);var r=j.rank|0;
+   renderBoard(r>=1&&r<=5?r-1:-1,r>5?{n:n,s:j.best,r:r}:null);
+  }else if(x&&x.status===403&&j.reserved){
+   // nombre reservado: pedir PIN y reintentar
+   pinEl.classList.remove('hidden');
+   if(j.badPin){pinEl.value='';retry('PIN incorrecto. Intenta otra vez o usa otro nombre.',true)}
+   else retry('Ese nombre está reservado. Escribe tu PIN o usa otro nombre.',true);
+  }else if(x&&x.status===400&&j.notAllowed){
+   retry('Ese nombre no está permitido. Usa otro.',false);
+  }else if(x&&x.status===429&&j.reserved){
+   retry('Demasiados intentos. Espera unos minutos o usa otro nombre.',true);
+  }else if(x&&x.status>=400&&x.status<500){
+   // el servidor respondió pero no aceptó el puntaje: se queda solo en este dispositivo
+   finishLocal(x.status===429?'Demasiados envíos seguidos: guardado solo en este dispositivo.':'');
+   apiTop(function(){if(apiOK)renderBoard(-1)});
+  }else{setApi(false);finishLocal('')}
+ });
 });
 $('play').addEventListener('click',startGame);
 $('again').addEventListener('click',startGame);
@@ -566,10 +629,10 @@ function frame(now){
  var dt=Math.min(.033,(now-last)/1000);last=now;if(paused||mode==='boot')return;
  update(dt);draw(dt);
 }
-window.__dsr={get paused(){return paused},pause:setPause,get banner(){return bannerTxt+'|'+bannerT},get music(){return {on:MUS.on,step:MUS.step,drums:MUS.drums,ctx:AC?AC.state:'none',out:!!MUS.out}},auto:function(v){autoplay=!!v},get shipX(){return ship.x},get lives(){return lives},hit:function(){ship.inv=0;hitPlayer()},get mode(){return mode},get score(){return score},get wave(){return wave},start:startGame,over:function(){if(mode==='play'){score=score||12340;lives=0;ship.alive=true;ship.inv=0;attract=false;hitPlayer()}},skip:function(n){for(var i=0;i<n;i++){update(1/60)}}};
+window.__dsr={get paused(){return paused},pause:setPause,get banner(){return bannerTxt+'|'+bannerT},get music(){return {on:MUS.on,step:MUS.step,drums:MUS.drums,ctx:AC?AC.state:'none',out:!!MUS.out}},auto:function(v){autoplay=!!v},get shipX(){return ship.x},get lives(){return lives},hit:function(){ship.inv=0;hitPlayer()},get mode(){return mode},get score(){return score},get wave(){return wave},get playT(){return playT},get api(){return {url:API,ok:apiOK,top:pub}},start:startGame,over:function(){if(mode==='play'){score=score||12340;lives=0;ship.alive=true;ship.inv=0;attract=false;hitPlayer()}},skip:function(n){for(var i=0;i<n;i++){update(1/60)}}};
 setMuteUI();
 Promise.all(NAMES.map(loadImg).concat([document.fonts&&document.fonts.load?Promise.all([document.fonts.load('700 20px Unbounded'),document.fonts.load('500 12px "JetBrains Mono"')]).catch(function(){}):0])).then(function(){
- initStars();fit();startAttract();$('loading').classList.add('hidden');
+ initStars();fit();startAttract();apiTop();$('loading').classList.add('hidden');
  if(/[?&]play=1/.test(location.search))startGame();
  requestAnimationFrame(frame);
 });

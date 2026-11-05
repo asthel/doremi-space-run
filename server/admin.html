@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Moderación · Doremi Space Run</title>
+<style>
+:root{--bg:#06060B;--card:#12111c;--line:rgba(255,255,255,.1);--text:#F3F1F6;--muted:#A29EAE;--cian:#5FF3E6;--rojo:#E8323A;--amarillo:#FFD21F;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
+h1{font-size:20px;margin:8px 0 4px}
+h2{font-size:17px;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+p.sub{margin:0 0 16px;color:var(--muted);font-size:14px}
+section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 14px}
+label{display:block;font-size:14px;color:var(--muted);margin:0 0 6px}
+input,select{width:100%;min-height:48px;padding:0 14px;border-radius:10px;border:1px solid rgba(95,243,230,.45);background:#0b0a14;color:var(--text);font:16px system-ui,sans-serif}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--cian);outline-offset:2px}
+.row{display:flex;gap:8px;align-items:stretch;margin:0 0 8px}
+.row>*{flex:1 1 0;min-width:0}
+button{min-height:48px;padding:0 16px;border-radius:10px;border:0;font:600 16px system-ui,sans-serif;cursor:pointer;color:#fff;background:#2a2840}
+button.pri{background:var(--rojo)}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);min-height:44px;font-size:14px}
+button.danger{background:#5a1418;border:1px solid var(--rojo)}
+button:disabled{opacity:.5}
+ul{list-style:none;margin:0;padding:0}
+li.item{border-top:1px solid var(--line);padding:12px 0}
+li.item:first-child{border-top:0}
+.who{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 8px}
+.nm{font:600 17px ui-monospace,Menlo,monospace;letter-spacing:.06em;word-break:break-all}
+.sc{font:500 15px ui-monospace,Menlo,monospace;color:var(--muted)}
+.tag{display:inline-block;font:600 12px system-ui,sans-serif;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:middle}
+.tag.hid{background:rgba(255,210,31,.15);color:var(--amarillo)}
+.tag.res{background:rgba(95,243,230,.15);color:var(--cian)}
+.tag.ty{background:rgba(255,255,255,.08);color:var(--muted)}
+.acts{display:flex;gap:8px}
+.acts button{flex:1 1 0}
+.line{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.line button{flex:0 0 auto}
+.empty{color:var(--muted);font-size:14px;padding:6px 0}
+.hint{color:var(--muted);font-size:13px;margin:8px 0 0}
+#status{position:sticky;top:0;z-index:2;margin:0 0 12px;padding:12px 14px;border-radius:10px;font-size:15px;background:#1b2d2b;color:var(--cian)}
+#status.err{background:#2d1416;color:#ffb3b6}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<main>
+ <h1>Moderación</h1>
+ <p class="sub">Doremi Space Run · ranking público</p>
+ <div id="status" class="hidden" role="status" aria-live="polite"></div>
+
+ <section id="login">
+  <form id="loginF" autocomplete="off">
+   <label for="key">Clave de administración</label>
+   <div class="row"><input id="key" type="password" autocomplete="current-password" required></div>
+   <div class="row"><button class="pri" type="submit">Entrar</button></div>
+   <p class="hint">La clave se guarda solo mientras esta pestaña esté abierta.</p>
+  </form>
+ </section>
+
+ <div id="app" class="hidden">
+  <section>
+   <h2>Puntajes <button class="ghost" id="reload" type="button">Actualizar</button></h2>
+   <ul id="scores"></ul>
+   <p class="hint">“Oculto” = el nombre coincide con una palabra bloqueada: no sale en el ranking público.</p>
+  </section>
+
+  <section>
+   <h2>Bloqueados</h2>
+   <form id="blockF" autocomplete="off">
+    <label for="bItem">Nombre o palabra</label>
+    <div class="row"><input id="bItem" maxlength="20" autocapitalize="characters" spellcheck="false" required></div>
+    <div class="row">
+     <select id="bType" aria-label="Tipo"><option value="word">Palabra</option><option value="name">Nombre exacto</option></select>
+     <button class="pri" type="submit">Bloquear</button>
+    </div>
+   </form>
+   <p class="hint">“Palabra” bloquea cualquier nombre que la contenga (también con 0/1/3/4… en lugar de letras). “Nombre exacto” bloquea solo ese nombre.</p>
+   <ul id="blocked"></ul>
+   <p class="hint" id="baseInfo"></p>
+  </section>
+
+  <section>
+   <h2>Nombres reservados</h2>
+   <form id="resF" autocomplete="off">
+    <div class="row">
+     <div><label for="rName">Nombre</label><input id="rName" maxlength="10" autocapitalize="characters" spellcheck="false" required></div>
+     <div><label for="rPin">PIN (6-12 números)</label><input id="rPin" type="password" inputmode="numeric" pattern="[0-9]{6,12}" maxlength="12" autocomplete="new-password" required></div>
+    </div>
+    <div class="row"><button class="pri" type="submit">Reservar / cambiar PIN</button></div>
+   </form>
+   <ul id="reserved"></ul>
+   <p class="hint">Solo quien sepa el PIN puede publicar con ese nombre (y con parecidos, como D3X para DEX). El PIN no se puede ver después: si se olvida, se pone uno nuevo.</p>
+  </section>
+
+  <div class="row"><button class="ghost" id="logout" type="button">Salir</button></div>
+ </div>
+</main>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var SK='dsr_admin_key';
+function getKey(){try{return sessionStorage.getItem(SK)||''}catch(e){return ''}}
+function setKey(k){try{if(k)sessionStorage.setItem(SK,k);else sessionStorage.removeItem(SK)}catch(e){}}
+var memKey=getKey();
+function say(t,err){var s=$('status');s.textContent=t;s.classList.toggle('err',!!err);s.classList.toggle('hidden',!t)}
+function clean(v){v=String(v||'');try{v=v.normalize('NFD')}catch(e){}return v.toUpperCase().replace(/[^A-Z0-9]/g,'')}
+
+function api(method,path,body){
+ var o={method:method,headers:{'Authorization':'Bearer '+memKey},cache:'no-store'};
+ if(body){o.headers['Content-Type']='application/json';o.body=JSON.stringify(body)}
+ return fetch('api/admin/'+path,o).then(function(r){return r.json().catch(function(){return {}}).then(function(j){
+  if(r.status===401){logout();say('Clave incorrecta.',true);throw 0}
+  if(r.status===429){logout();say('Demasiados intentos fallidos. Espera 10 minutos.',true);throw 0}
+  if(r.status===503){logout();say('La moderación está apagada: falta ADMIN_KEY en el servidor.',true);throw 0}
+  if(!r.ok){say(j.error||('Error '+r.status),true);throw 0}
+  return j})},function(){say('No hay conexión con el servidor.',true);throw 0});
+}
+
+function btn(txt,cls,fn){var b=document.createElement('button');b.type='button';b.textContent=txt;if(cls)b.className=cls;b.addEventListener('click',fn);return b}
+function tag(txt,cls){var t=document.createElement('span');t.className='tag '+cls;t.textContent=txt;return t}
+
+function render(st){
+ var ul=$('scores');ul.innerHTML='';
+ if(!st.entries.length){var e=document.createElement('li');e.className='empty';e.textContent='Todavía no hay puntajes.';ul.appendChild(e)}
+ st.entries.forEach(function(en){
+  var li=document.createElement('li');li.className='item';
+  var who=document.createElement('div');who.className='who';
+  var nm=document.createElement('span');nm.className='nm';nm.textContent=en.name;
+  if(en.hidden)nm.appendChild(tag('oculto','hid'));
+  if(st.reserved.indexOf(en.name)>=0)nm.appendChild(tag('reservado','res'));
+  var sc=document.createElement('span');sc.className='sc';sc.textContent=en.score.toLocaleString('es-MX');
+  who.appendChild(nm);who.appendChild(sc);li.appendChild(who);
+  var acts=document.createElement('div');acts.className='acts';
+  acts.appendChild(btn('Borrar','',function(){
+   if(!confirm('¿Borrar el puntaje de '+en.name+'?'))return;
+   api('DELETE','scores/'+encodeURIComponent(en.name)).then(function(s){render(s);say('Borrado: '+en.name)},function(){})}));
+  acts.appendChild(btn('Borrar + bloquear','danger',function(){
+   if(!confirm('¿Borrar el puntaje de '+en.name+' y bloquear ese nombre para siempre?'))return;
+   api('DELETE','scores/'+encodeURIComponent(en.name)).then(function(){return api('POST','block',{name:en.name})})
+    .then(function(s){render(s);say('Borrado y bloqueado: '+en.name)},function(){})}));
+  li.appendChild(acts);ul.appendChild(li);
+ });
+ var bl=$('blocked');bl.innerHTML='';
+ if(!st.blocked.length){var e2=document.createElement('li');e2.className='empty';e2.textContent='Nada bloqueado desde aquí.';bl.appendChild(e2)}
+ st.blocked.forEach(function(b){
+  var li=document.createElement('li');li.className='item line';
+  var nm=document.createElement('span');nm.className='nm';nm.textContent=b.value;nm.appendChild(tag(b.type==='name'?'nombre':'palabra','ty'));
+  li.appendChild(nm);
+  li.appendChild(btn('Quitar','ghost',function(){
+   if(!confirm('¿Quitar '+b.value+' de la lista de bloqueados?'))return;
+   api('DELETE','block/'+encodeURIComponent(b.value)).then(function(s){render(s);say('Quitado: '+b.value)},function(){})}));
+  bl.appendChild(li);
+ });
+ $('baseInfo').textContent='Además, '+st.baseWords+' palabras fijas en blocklist.json (se editan en el servidor).';
+ var rl=$('reserved');rl.innerHTML='';
+ if(!st.reserved.length){var e3=document.createElement('li');e3.className='empty';e3.textContent='No hay nombres reservados.';rl.appendChild(e3)}
+ st.reserved.forEach(function(n){
+  var li=document.createElement('li');li.className='item line';
+  var nm=document.createElement('span');nm.className='nm';nm.textContent=n;li.appendChild(nm);
+  li.appendChild(btn('Quitar','ghost',function(){
+   if(!confirm('¿Quitar la reserva de '+n+'? Cualquiera podrá usar ese nombre.'))return;
+   api('DELETE','reserve/'+encodeURIComponent(n)).then(function(s){render(s);say('Reserva quitada: '+n)},function(){})}));
+  rl.appendChild(li);
+ });
+}
+
+function load(){return api('GET','scores').then(function(s){$('login').classList.add('hidden');$('app').classList.remove('hidden');render(s)},function(){})}
+function logout(){memKey='';setKey('');$('app').classList.add('hidden');$('login').classList.remove('hidden');$('key').value=''}
+
+$('loginF').addEventListener('submit',function(ev){ev.preventDefault();memKey=$('key').value;say('');
+ api('GET','scores').then(function(s){setKey(memKey);$('key').value='';$('login').classList.add('hidden');$('app').classList.remove('hidden');render(s)},function(){})});
+$('reload').addEventListener('click',function(){say('');load()});
+$('logout').addEventListener('click',function(){logout();say('Sesión cerrada.')});
+$('bItem').addEventListener('input',function(){var c=clean(this.value);if(c!==this.value)this.value=c});
+$('rName').addEventListener('input',function(){var c=clean(this.value);if(c!==this.value)this.value=c});
+$('blockF').addEventListener('submit',function(ev){ev.preventDefault();var v=clean($('bItem').value),t=$('bType').value;if(!v)return;
+ var body={};body[t]=v;api('POST','block',body).then(function(s){$('bItem').value='';render(s);say('Bloqueado: '+v)},function(){})});
+$('resF').addEventListener('submit',function(ev){ev.preventDefault();var n=clean($('rName').value),p=$('rPin').value;
+ if(!/^[0-9]{6,12}$/.test(p)){say('El PIN debe tener de 6 a 12 números.',true);return}
+ api('POST','reserve',{name:n,pin:p}).then(function(s){$('rName').value='';$('rPin').value='';render(s);say('Reservado: '+n)},function(){})});
+
+if(memKey)load();
+})();
+</script>
+</body>
+</html>

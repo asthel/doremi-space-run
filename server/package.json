@@ -1,0 +1,13 @@
+{
+  "name": "doremi-space-run-leaderboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public leaderboard API for Doremi Space Run (Node.js built-ins only, no dependencies).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
